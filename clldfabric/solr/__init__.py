@@ -24,6 +24,23 @@ TOMCAT_SOLR_CONFIG = """\
 </Context>
 """.format(SOLR_HOME)
 
+NGINX_SOLR_ADMIN = """\
+location ^~ /solr {
+        # Force SSL for Solr admin access
+        if ($ssl_protocol = "") {
+            return 301 https://$server_name$request_uri;
+        }
+
+        auth_basic            "Restricted Solr admin";
+        auth_basic_user_file  /etc/nginx/locations.ssl.d/solr.htpasswd;
+
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Server $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_pass http://localhost:8080;
+    }
+"""
+
 here = path(__file__).dirname()
 SCHEMA = here.joinpath('schema.xml')
 SOLRCONFIG = here.joinpath('solrconfig.xml')

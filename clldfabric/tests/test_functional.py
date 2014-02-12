@@ -1,4 +1,5 @@
 from mock import Mock, MagicMock, patch
+from path import path
 
 
 @patch.multiple('clldfabric.util',
@@ -15,9 +16,11 @@ from mock import Mock, MagicMock, patch
                 service=Mock(),
                 cd=MagicMock(),
                 require=Mock(),
-                postgres=Mock())
+                postgres=Mock(),
+                import_module=Mock(return_value=None),
+                data_file=Mock(return_value=path('.')))
 def test_deploy():
-    from clldfabric.util import deploy
+    from clldfabric.util import deploy, copy_files
     from clldfabric.config import App
 
     app = App('test', 9999, domain='d')
@@ -25,6 +28,7 @@ def test_deploy():
     deploy(app, 'test', with_files=False)
     deploy(app, 'test', with_alembic=True, with_files=False)
     deploy(app, 'production', with_files=False)
+    copy_files(app)
 
 
 @patch.multiple('clldfabric.tasks', execute=Mock())

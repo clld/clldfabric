@@ -124,6 +124,7 @@ APPS = [(app.name, app) for app in [
     App('autotyp',
         8896,
         domain='autotyp.clld.org',
+        production=SERVERS[3],
         test=SERVERS[4]),
     App('clldportal',
         8895,

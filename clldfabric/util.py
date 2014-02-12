@@ -53,6 +53,21 @@ server {
 }
 """
 
+DEFAULT_SITE_SSL = """\
+server {
+        listen 443 default_server;
+        root /usr/share/nginx/www;
+        index index.html index.htm;
+        server_name localhost;
+
+        ssl on;
+        ssl_certificate /etc/nginx/ssl/server.crt;
+        ssl_certificate_key /etc/nginx/ssl/server.key;
+        include /etc/nginx/locations.ssl.d/*.conf;
+}
+"""
+
+
 LOCATION_TEMPLATE = """\
 location /{app.name} {{
 {auth}
@@ -491,7 +506,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
         #sudo('pip install -U setuptools')
         sudo('pip install pip==1.4.1')
         require.python.package('gunicorn', use_sudo=True)
-        for repos in ['clld'] + getattr(app, 'dependencies', []) + [app.name]:
+        for repos in ['clld', 'clldmpg'] + getattr(app, 'dependencies', []) + [app.name]:
             install_repos(repos)
         sudo('webassets -m %s.assets build' % app.name)
 
