@@ -12,7 +12,7 @@ from path import path
 
 
 # access details for the following servers must be provided in a suitable ssh config.
-SERVERS = ['cldbstest', 'clld1', 'clld3', 'clld2', 'cldbs']
+SERVERS = ['cldbstest', 'clld1', 'clld3', 'clld2', 'cldbs', 'clld4']
 
 
 def repos(name):
@@ -121,6 +121,36 @@ class App(object):
 
 
 APPS = [(app.name, app) for app in [
+    App('csd',
+        8902,
+        domain='csd.clld.org',
+        test=SERVERS[2],
+        production=SERVERS[5]),
+    App('tsezacp',
+        8901,
+        domain='tsezacp.clld.org',
+        test=SERVERS[1],
+        production=SERVERS[2]),
+    App('nts',
+        8900,
+        domain='nts.clld.org',
+        production=SERVERS[4],
+        test=SERVERS[3]),
+    App('tsammalex',
+        8899,
+        domain='tsammalex.clld.org',
+        production=SERVERS[4],
+        test=SERVERS[3]),
+    App('sails',
+        8898,
+        domain='sails.clld.org',
+        production=SERVERS[4],
+        test=SERVERS[3]),
+    App('dictionaria',
+        8897,
+        domain='dictionaria.clld.org',
+        production=SERVERS[4],
+        test=SERVERS[3]),
     App('autotyp',
         8896,
         domain='autotyp.clld.org',
@@ -161,7 +191,7 @@ APPS = [(app.name, app) for app in [
         dependencies=['glottolog3']),
     App('wold2',
         8888,
-        domain='wold.livingsources.org',
+        domain='wold.clld.org',
         test=SERVERS[0],
         production=SERVERS[1]),
     App('wals3',

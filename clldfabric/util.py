@@ -13,11 +13,12 @@ from getpass import getpass
 import os
 from datetime import datetime, timedelta
 from importlib import import_module
+import contextlib
 
 from pytz import timezone, utc
 
 try:  # pragma: no cover
-    from fabric.api import sudo, run, local, put, env, cd, task, execute
+    from fabric.api import sudo, run, local, put, env, cd, task, execute, settings
     env.use_ssh_config = True
     from fabric.contrib.console import confirm
     from fabric.contrib.files import exists
@@ -37,6 +38,20 @@ from clld.scripts.util import data_file
 # we prevent the tasks defined here from showing up in fab --list, because we only
 # want the wrapped version imported from clldfabric.tasks to be listed.
 __all__ = []
+
+
+@contextlib.contextmanager
+def working_directory(path):
+    """A context manager which changes the working directory to the given
+    path, and then changes it back to its previous value on exit.
+    """
+    prev_cwd = os.getcwd()
+    os.chdir(path)
+    try:
+        yield
+    finally:
+        os.chdir(prev_cwd)
+
 
 DEFAULT_SITE = """\
 server {
@@ -321,6 +336,11 @@ pipeline =
 """,
 }
 
+PIP_CONF = """\
+[install]
+download-cache = ~/.pip/download_cache
+"""
+
 
 def hashpw(pw):
     letters = 'abcdefghijklmnopqrstuvwxyz' \
@@ -330,7 +350,7 @@ def hashpw(pw):
 
 
 def install_repos(name):
-    sudo('pip install --use-mirrors -e git+%s#egg=%s' % (config.repos(name), name))
+    sudo('pip install --allow-all-external -e git+%s#egg=%s' % (config.repos(name), name))
 
 
 def create_file_as_root(path, content, **kw):
@@ -471,6 +491,20 @@ def copy_files(app):
 
 @task
 def deploy(app, environment, with_alembic=False, with_blog=False, with_files=True):
+    with settings(warn_only=True):
+        lsb_release = run('lsb_release -a')
+    for codename in ['trusty', 'precise']:
+        if codename in lsb_release:
+            lsb_release = codename
+            break
+    else:
+        if lsb_release != '{"status": "ok"}':
+            # if this were the case, we'd be in a test!
+            raise ValueError('unsupported platform: %s' % lsb_release)
+
+    if environment == 'test' and app.workers > 3:
+        app.workers = 3
+
     template_variables = get_template_variables(
         app,
         monitor_mode='true' if environment == 'production' else 'false',
@@ -490,12 +524,21 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
         'curl',
         'libxml2-dev',
         'libxslt-dev',
+        'python-pip',
     ]:
         require.deb.package(pkg)
     require.postgres.user(app.name, app.name)
     require.postgres.database(app.name, app.name)
     require.files.directory(app.venv, use_sudo=True)
-    require.python.virtualenv(app.venv, use_sudo=True)
+
+    if lsb_release == 'precise':
+        require.python.virtualenv(app.venv, use_sudo=True)
+    else:
+        require.deb.package('python3-dev')
+        require.deb.package('python-virtualenv')
+        if not exists(app.venv.joinpath('bin')):
+            sudo('virtualenv -q --python=python3 %s' % app.venv)
+
     require.files.directory(app.logs, use_sudo=True)
 
     if app.pages and not exists(str(app.pages)):
@@ -504,8 +547,12 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
 
     with virtualenv(app.venv):
         #sudo('pip install -U setuptools')
-        sudo('pip install pip==1.4.1')
+        if lsb_release == 'precise':
+            sudo('pip install pip==1.4.1')
+        #else:
+        #    sudo('pip install pip')
         require.python.package('gunicorn', use_sudo=True)
+        require.python.package('psycopg2', use_sudo=True)
         for repos in ['clld', 'clldmpg'] + getattr(app, 'dependencies', []) + [app.name]:
             install_repos(repos)
         sudo('webassets -m %s.assets build' % app.name)
@@ -544,13 +591,13 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             execute(copy_files, app)
 
     if not with_alembic and confirm('Recreate database?', default=False):
-        supervisor(app, 'pause', template_variables)
-        local('pg_dump -x -f /tmp/{0.name}.sql {0.name}'.format(app))
+        local('pg_dump -x -O -f /tmp/{0.name}.sql {0.name}'.format(app))
         local('gzip -f /tmp/{0.name}.sql'.format(app))
         require.files.file(
             '/tmp/{0.name}.sql.gz'.format(app),
             source="/tmp/{0.name}.sql.gz".format(app))
         sudo('gunzip -f /tmp/{0.name}.sql.gz'.format(app))
+        supervisor(app, 'pause', template_variables)
 
         if postgres.database_exists(app.name):
             with cd('/var/lib/postgresql'):
@@ -562,6 +609,8 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     else:
         if exists(app.src.joinpath('alembic.ini')):
             if confirm('Upgrade database?', default=False):
+                # Note: stopping the app is not strictly necessary, because the alembic
+                # revisions run in separate transactions!
                 supervisor(app, 'pause', template_variables)
                 with virtualenv(app.venv):
                     with cd(app.src):
@@ -578,6 +627,22 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     time.sleep(5)
     res = run('curl http://localhost:%s/_ping' % app.port)
     assert json.loads(res)['status'] == 'ok'
+
+
+@task
+def pipfreeze(app, environment):
+    with virtualenv(app.venv):
+        with open('requirements.txt', 'w') as fp:
+            for line in sudo('pip freeze').splitlines():
+                if '%s.git' % app.name in line:
+                    continue
+                if line.split('==')[0].lower() in ['fabric', 'pyx', 'fabtools', 'paramiko', 'pycrypto', 'babel']:
+                    continue
+                if 'clld.git' in line:
+                    line = 'clld'
+                if 'clldmpg.git' in line:
+                    line = 'clldmpg'
+                fp.write(line+ '\n')
 
 
 @task
@@ -603,18 +668,19 @@ def create_downloads(app):  # pragma: no cover
     require.files.directory(dl_dir, use_sudo=True, mode="755")
 
 
-def bootstrap():  # pragma: no cover
-    for pkg in 'vim tree nginx'.split():
+def bootstrap(nr='y'):  # pragma: no cover
+    for pkg in 'vim tree nginx open-vm-tools'.split():
         require.deb.package(pkg)
 
     sudo('/etc/init.d/nginx start')
 
-    for cmd in [
-        'wget -O /etc/apt/sources.list.d/newrelic.list http://download.newrelic.com/debian/newrelic.list',
-        'apt-key adv --keyserver hkp://subkeys.pgp.net --recv-keys 548C16BF',
-        'apt-get update',
-        'apt-get install newrelic-sysmond',
-        'nrsysmond-config --set license_key=%s' % os.environ['NEWRELIC_API_KEY'],
-        '/etc/init.d/newrelic-sysmond start',
-    ]:
-        sudo(cmd)
+    if nr == 'y':
+        for cmd in [
+            'wget -O /etc/apt/sources.list.d/newrelic.list http://download.newrelic.com/debian/newrelic.list',
+            'apt-key adv --keyserver hkp://subkeys.pgp.net --recv-keys 548C16BF',
+            'apt-get update',
+            'apt-get install newrelic-sysmond',
+            'nrsysmond-config --set license_key=%s' % os.environ['NEWRELIC_API_KEY'],
+            '/etc/init.d/newrelic-sysmond start',
+        ]:
+            sudo(cmd)

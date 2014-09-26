@@ -29,8 +29,8 @@ def _assign_host(environment):
 
 
 @task
-def bootstrap():
-    util.bootstrap()  # pragma: no cover
+def bootstrap(nr='y'):
+    util.bootstrap(nr=nr)  # pragma: no cover
 
 
 @hosts('localhost')
@@ -89,6 +89,15 @@ def deploy(environment, with_blog=False):
     if not with_blog:
         with_blog = getattr(APP, 'with_blog', False)
     execute(util.deploy, APP, environment, with_blog=with_blog)
+
+
+@hosts('localhost')
+@task
+def pipfreeze(environment):
+    """get installed versions
+    """
+    _assign_host(environment)
+    execute(util.pipfreeze, APP, environment)
 
 
 @hosts('localhost')
