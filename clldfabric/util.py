@@ -7,7 +7,6 @@ Deployment utilities for clld apps
 #
 import time
 import json
-import crypt
 import random
 from getpass import getpass
 import os
@@ -342,13 +341,6 @@ download-cache = ~/.pip/download_cache
 """
 
 
-def hashpw(pw):
-    letters = 'abcdefghijklmnopqrstuvwxyz' \
-        'ABCDEFGHIJKLMNOPQRSTUVWXYZ' \
-        '0123456789/.'
-    return crypt.crypt(pw, random.choice(letters) + random.choice(letters))
-
-
 def install_repos(name):
     sudo('pip install --allow-all-external -e git+%s#egg=%s' % (config.repos(name), name))
 
@@ -456,9 +448,11 @@ def http_auth(app):
     while not pwds['admin']:
         pwds['admin'] = getpass(prompt='HTTP Basic Auth password for user admin: ')
 
-    create_file_as_root(
-        app.nginx_htpasswd,
-        ''.join('%s:%s\n' % (name, hashpw(pw)) for name, pw in pwds.items()))
+    for i, pair in enumerate(pwds.items()):
+        opts = 'bd'
+        if i == 0:
+            opts += 'c'
+        sudo('htpasswd -%s %s %s %s' % (opts, app.nginx_htpasswd, pair[0], pair[1]))
 
     return bool(pwds[app.name]), """\
         proxy_set_header Authorization $http_authorization;
@@ -525,6 +519,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
         'libxml2-dev',
         'libxslt-dev',
         'python-pip',
+        'apache2-utils',  # we need htpasswd
     ]:
         require.deb.package(pkg)
     require.postgres.user(app.name, app.name)
@@ -551,6 +546,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             sudo('pip install pip==1.4.1')
         #else:
         #    sudo('pip install pip')
+        sudo('pip install webhelpers2==2.0rc1')
         require.python.package('gunicorn', use_sudo=True)
         require.python.package('psycopg2', use_sudo=True)
         for repos in ['clld', 'clldmpg'] + getattr(app, 'dependencies', []) + [app.name]:
