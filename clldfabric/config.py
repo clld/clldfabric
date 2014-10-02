@@ -8,11 +8,12 @@ Configuration of CLLD apps.
     - ssh config
     - environment variables
 """
-from path import path
+from pathlib import PurePosixPath as path
 
 
 # access details for the following servers must be provided in a suitable ssh config.
 SERVERS = ['cldbstest', 'clld1', 'clld3', 'clld2', 'cldbs', 'clld4']
+
 
 
 def repos(name):
@@ -97,7 +98,7 @@ class App(object):
     def bin(self, command):
         """bin directory of the app's virtualenv.
         """
-        return self.venv.joinpath('bin', command)
+        return str(self.venv.joinpath('bin', command))
 
     @property
     def supervisor(self):
@@ -164,12 +165,12 @@ APPS = [(app.name, app) for app in [
         8894,
         domain='asjp.clld.org',
         test=SERVERS[2],
-        production=SERVERS[0]),
+        production=SERVERS[5]),
     App('ids',
         8893,
         domain='ids.clld.org',
         test=SERVERS[0],
-        production=SERVERS[2]),
+        production=SERVERS[5]),
     App('valpal',
         8892,
         test=SERVERS[2],

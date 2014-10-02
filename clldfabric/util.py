@@ -1,13 +1,7 @@
-"""
-Deployment utilities for clld apps
-"""
+"""Deployment utilities for clld apps."""
 # flake8: noqa
-#
-# TODO: logrotate!
-#
 import time
 import json
-import random
 from getpass import getpass
 import os
 from datetime import datetime, timedelta
@@ -410,7 +404,7 @@ def require_bibutils(app):  # pragma: no cover
     sudo make install
     """
     if not exists('/usr/local/bin/bib2xml'):
-        tgz = app.venv.joinpath('src', 'clld', 'tools',  'bibutils_5.0_src.tgz')
+        tgz = str(app.venv.joinpath('src', 'clld', 'tools', 'bibutils_5.0_src.tgz'))
         sudo('tar -xzvf {tgz} -C {app.home}'.format(tgz=tgz, app=app))
         with cd(app.home.joinpath('bibutils_5.0')):
             sudo('./configure')
@@ -421,6 +415,7 @@ def require_bibutils(app):  # pragma: no cover
 @task
 def uninstall(app):  # pragma: no cover
     for file_ in [app.supervisor, app.nginx_location, app.nginx_site]:
+        file_ = str(file_)
         if exists(file_):
             sudo('rm %s' % file_)
     service.reload('nginx')
@@ -434,7 +429,7 @@ def maintenance(app, hours=2, template_variables=None):
     template_variables = template_variables or get_template_variables(app)
     ts = utc.localize(datetime.utcnow() + timedelta(hours=hours))
     ts = ts.astimezone(timezone('Europe/Berlin')).strftime('%Y-%m-%d %H:%M %Z%z')
-    require.files.directory(app.www, use_sudo=True)
+    require.files.directory(str(app.www), use_sudo=True)
     create_file_as_root(
         app.www.joinpath('503.html'),
         HTTP_503_TEMPLATE.format(timestamp=ts, **template_variables))
@@ -448,7 +443,7 @@ def http_auth(app):
     while not pwds['admin']:
         pwds['admin'] = getpass(prompt='HTTP Basic Auth password for user admin: ')
 
-    for i, pair in enumerate(pwds.items()):
+    for i, pair in enumerate([(n, p) for n, p in pwds.items() if p]):
         opts = 'bd'
         if i == 0:
             opts += 'c'
@@ -524,23 +519,23 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
         require.deb.package(pkg)
     require.postgres.user(app.name, app.name)
     require.postgres.database(app.name, app.name)
-    require.files.directory(app.venv, use_sudo=True)
+    require.files.directory(str(app.venv), use_sudo=True)
 
     if lsb_release == 'precise':
-        require.python.virtualenv(app.venv, use_sudo=True)
+        require.python.virtualenv(str(app.venv), use_sudo=True)
     else:
         require.deb.package('python3-dev')
         require.deb.package('python-virtualenv')
-        if not exists(app.venv.joinpath('bin')):
+        if not exists(str(app.venv.joinpath('bin'))):
             sudo('virtualenv -q --python=python3 %s' % app.venv)
 
-    require.files.directory(app.logs, use_sudo=True)
+    require.files.directory(str(app.logs), use_sudo=True)
 
     if app.pages and not exists(str(app.pages)):
         with cd(str(app.home)):
             sudo('sudo -u {0} git clone https://github.com/clld/{0}-pages.git'.format(app.name))
 
-    with virtualenv(app.venv):
+    with virtualenv(str(app.venv)):
         #sudo('pip install -U setuptools')
         if lsb_release == 'precise':
             sudo('pip install pip==1.4.1')
@@ -559,7 +554,8 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     # configure nginx:
     #
     require.files.directory(
-        str(app.nginx_location.dirname()), owner='root', group='root', use_sudo=True)
+        os.path.dirname(str(app.nginx_location)),
+        owner='root', group='root', use_sudo=True)
 
     restricted, auth = http_auth(app)
     if restricted:
@@ -608,8 +604,8 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                 # Note: stopping the app is not strictly necessary, because the alembic
                 # revisions run in separate transactions!
                 supervisor(app, 'pause', template_variables)
-                with virtualenv(app.venv):
-                    with cd(app.src):
+                with virtualenv(str(app.venv)):
+                    with cd(str(app.src)):
                         sudo('sudo -u {0.name} {1} -n production upgrade head'.format(
                             app, app.bin('alembic')))
 

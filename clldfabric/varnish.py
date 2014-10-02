@@ -12,7 +12,6 @@ deploy with varnish:
 - adapt nginx site config
 - /etc/init.d/nginx reload
 """
-from path import path
 from fabric.contrib.files import append, exists
 from fabtools import require
 from fabtools import service
@@ -72,14 +71,15 @@ def cache(app):  # pragma: no cover
     create_file_as_root('/etc/varnish/main.vcl', MAIN_VCL)
 
     sites_vcl = '/etc/varnish/sites.vcl'
-    site_config = path('/etc/varnish/sites/{app.name}.vcl'.format(app=app))
+    site_config_dir = '/etc/varnish/sites'
+    site_config = '/'.join(site_config_dir, '{app.name}.vcl'.format(app=app))
     include = 'include "%s";' % site_config
     if exists(sites_vcl):
         append(sites_vcl, include, use_sudo=True)
     else:
         create_file_as_root(sites_vcl, include + '\n')
 
-    require.files.directory(str(site_config.dirname()), use_sudo=True)
+    require.files.directory(site_config_dir, use_sudo=True)
     create_file_as_root(site_config, SITE_VCL_TEMPLATE.format(app=app))
     service.restart('varnish')
 
