@@ -340,8 +340,9 @@ def install_repos(name):
 
 
 def create_file_as_root(path, content, **kw):
-    require.files.file(
-        str(path), contents=content, owner='root', group='root', use_sudo=True, **kw)
+    kw.setdefault('owner', 'root')
+    kw.setdefault('group', 'root')
+    require.files.file(str(path), contents=content, use_sudo=True, **kw)
 
 
 def get_template_variables(app, monitor_mode=False, with_blog=False):
@@ -479,6 +480,18 @@ def copy_files(app):
 
 
 @task
+def copy_rdfdump(app):
+    dl_dir = app.src.joinpath(app.name, 'static', 'download')
+    require.files.directory(dl_dir, use_sudo=True, mode="777")
+    local_dl_dir = data_file(import_module(app.name), '..', app.name, 'static', 'download')
+    for f in local_dl_dir.files('*.n3.gz'):
+        target = dl_dir.joinpath(f.basename())
+        create_file_as_root(target, open(f).read())
+        sudo('chown %s:%s %s' % (app.name, app.name, target))
+    require.files.directory(dl_dir, use_sudo=True, mode="755")
+
+
+@task
 def deploy(app, environment, with_alembic=False, with_blog=False, with_files=True):
     with settings(warn_only=True):
         lsb_release = run('lsb_release -a')
@@ -542,6 +555,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
         #else:
         #    sudo('pip install pip')
         sudo('pip install webhelpers2==2.0rc1')
+        sudo('pip install newrelic')
         require.python.package('gunicorn', use_sudo=True)
         require.python.package('psycopg2', use_sudo=True)
         for repos in ['clld', 'clldmpg'] + getattr(app, 'dependencies', []) + [app.name]:

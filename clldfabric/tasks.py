@@ -120,6 +120,15 @@ def create_downloads(environment):
 
 @hosts('localhost')
 @task
+def copy_rdfdump(environment):
+    """copy rdfdump for the app
+    """
+    _assign_host(environment)
+    execute(util.copy_rdfdump, APP)
+
+
+@hosts('localhost')
+@task
 def copy_files(environment):
     """copy files for the app
     """

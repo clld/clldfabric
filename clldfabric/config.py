@@ -36,7 +36,7 @@ class App(object):
         kw.setdefault('test', SERVERS[1])
         for k, v in kw.items():
             setattr(self, k, v)
-        assert self.production != self.test
+        #assert self.production != self.test
 
     @property
     def src(self):
@@ -122,6 +122,11 @@ class App(object):
 
 
 APPS = [(app.name, app) for app in [
+    App('dogonlanguages',
+        8903,
+        domain='dogonlanguages.clld.org',
+        test=SERVERS[5],
+        production=SERVERS[5]),
     App('csd',
         8902,
         domain='csd.clld.org',
@@ -199,7 +204,7 @@ APPS = [(app.name, app) for app in [
         8887,
         domain='wals.info',
         workers=7,
-        test=SERVERS[2],
+        test=SERVERS[5],
         production=SERVERS[0],
         with_blog=True),
     App('apics',
