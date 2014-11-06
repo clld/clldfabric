@@ -407,7 +407,7 @@ def require_bibutils(app):  # pragma: no cover
     if not exists('/usr/local/bin/bib2xml'):
         tgz = str(app.venv.joinpath('src', 'clld', 'tools', 'bibutils_5.0_src.tgz'))
         sudo('tar -xzvf {tgz} -C {app.home}'.format(tgz=tgz, app=app))
-        with cd(app.home.joinpath('bibutils_5.0')):
+        with cd(str(app.home.joinpath('bibutils_5.0'))):
             sudo('./configure')
             sudo('make')
             sudo('make install')
@@ -653,12 +653,12 @@ def pipfreeze(app, environment):
 
 @task
 def run_script(app, script_name, *args):  # pragma: no cover
-    with cd(app.home):
+    with cd(str(app.home)):
         sudo(
             '%s %s %s#%s %s' % (
                 app.bin('python'),
                 app.src.joinpath(app.name, 'scripts', '%s.py' % script_name),
-                app.config.basename(),
+                os.path.basename(str(app.config)),
                 app.name,
                 ' '.join('%s' % arg for arg in args),
             ),
