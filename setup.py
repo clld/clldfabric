@@ -6,7 +6,7 @@ from setuptools import setup, find_packages
 requires = [
     'clld',
     'fabric',
-    'fabtools==0.16',
+    'fabtools==0.19',
     'path.py',
     'pathlib',
     'pytz',

@@ -535,6 +535,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     require.files.directory(str(app.venv), use_sudo=True)
 
     if lsb_release == 'precise':
+        require.deb.package('python-dev')
         require.python.virtualenv(str(app.venv), use_sudo=True)
     else:
         require.deb.package('python3-dev')
