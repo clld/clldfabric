@@ -14,7 +14,7 @@ from six.moves.configparser import SafeConfigParser
 from pathlib import PurePosixPath as path
 
 # access details for the following servers must be provided in a suitable ssh config.
-SERVERS = {'cldbstest', 'clld1', 'clld3', 'clld2', 'cldbs', 'clld4'}
+SERVERS = {'harald', 'uri', 'steve', 'clld2', 'christfried', 'matthew'}
 
 ERROR_EMAIL = 'robert_forkel@eva.mpg.de'
 
