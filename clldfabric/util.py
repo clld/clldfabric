@@ -624,6 +624,9 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                         sudo('sudo -u {0.name} {1} -n production upgrade head'.format(
                             app, app.bin('alembic')))
 
+                if confirm('Vacuum database?', default=False):
+                    sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
+
     create_file_as_root(
         app.config, CONFIG_TEMPLATES[environment].format(**template_variables))
     create_file_as_root(
