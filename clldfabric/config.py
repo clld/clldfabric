@@ -16,14 +16,6 @@ from pathlib import PurePosixPath as path
 # access details for the following servers must be provided in a suitable ssh config.
 SERVERS = {'harald', 'uri', 'steve', 'clld2', 'christfried', 'matthew'}
 
-ERROR_EMAIL = 'robert_forkel@eva.mpg.de'
-
-
-def repos(name):
-    """git URL for a CLLD repository on GitHub.
-    """
-    return 'git://github.com/clld/%s.git' % name
-
 
 class App(object):
     """Object storing basic configuration information for an app.
@@ -131,6 +123,7 @@ class Config(dict):
         'getint': ['workers', 'deploy_duration', 'port'],
         'getboolean': ['with_blog', '_pages'],
         'getlist': ['dependencies'],  # whitespace separated list
+        'getlines': ['require_deb', 'require_pip'],  # newline separated list
     }
 
     def __init__(self):
@@ -139,6 +132,7 @@ class Config(dict):
 
         parser = SafeConfigParser()
         parser.getlist = lambda s, o: parser.get(s, o).split()
+        parser.getlines = lambda s, o: [l for l in parser.get(s, o).splitlines() if l]
         found = parser.read(self.filename)
         if not found:
             raise RuntimeError('failed to read app config %r' % self.filename)

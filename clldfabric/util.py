@@ -10,27 +10,21 @@ import contextlib
 
 from pytz import timezone, utc
 
-try:  # pragma: no cover
-    from fabric.api import sudo, run, local, put, env, cd, task, execute, settings
-    env.use_ssh_config = True
-    from fabric.contrib.console import confirm
-    from fabric.contrib.files import exists
-    from fabtools import require
-    require.python.DEFAULT_PIP_VERSION = None
-    from fabtools.python import virtualenv
-    from fabtools import service
-    from fabtools import postgres
-except ImportError:  # pragma: no cover
-    sudo, run, local, put, env, cd, confirm, require, virtualenv, service, postgres = \
-        None, None, None, None, None, None, None, None, None, None, None
+from fabric.api import sudo, run, local, put, env, cd, task, execute, settings
+from fabric.contrib.console import confirm
+from fabric.contrib.files import exists
+from fabtools import require
+from fabtools.python import virtualenv
+from fabtools import service
+from fabtools import postgres
 
-from clldfabric import config
 from clld.scripts.util import data_file
-
 
 # we prevent the tasks defined here from showing up in fab --list, because we only
 # want the wrapped version imported from clldfabric.tasks to be listed.
 __all__ = []
+
+env.use_ssh_config = True
 
 
 @contextlib.contextmanager
@@ -300,7 +294,7 @@ formatter = generic
 
 [handler_exc_handler]
 class = handlers.SMTPHandler
-args = (('localhost', 25), '{app.name}@{env.host}', ['{config.ERROR_EMAIL}'], '{app.name} Exception')
+args = (('localhost', 25), '{app.name}@{env.host}', ['{app.error_email}'], '{app.name} Exception')
 level = ERROR
 formatter = exc_formatter
 
@@ -329,15 +323,6 @@ pipeline =
 """,
 }
 
-PIP_CONF = """\
-[install]
-download-cache = ~/.pip/download_cache
-"""
-
-
-def install_repos(name):
-    sudo('pip install --allow-all-external -e git+%s#egg=%s' % (config.repos(name), name))
-
 
 def create_file_as_root(path, content, **kw):
     kw.setdefault('owner', 'root')
@@ -353,7 +338,6 @@ def get_template_variables(app, monitor_mode=False, with_blog=False):
         app=app,
         env=env,
         newrelic_api_key=os.environ.get('NEWRELIC_API_KEY'),
-        config=config,
         gunicorn=app.bin('gunicorn_paster'),
         newrelic=app.bin('newrelic-admin'),
         monitor_mode=monitor_mode,
@@ -515,21 +499,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     require.users.user(app.name, shell='/bin/bash')
     require.postfix.server(env['host'])
     require.postgres.server()
-    for pkg in [
-        'libpq-dev',
-        'git',
-        'nginx',
-        'supervisor',
-        'openjdk-6-jre',
-        'make',
-        'sqlite3',
-        'curl',
-        'libxml2-dev',
-        'libxslt-dev',
-        'python-pip',
-        'apache2-utils',  # we need htpasswd
-    ]:
-        require.deb.package(pkg)
+    require.deb.packages(app.require_deb)
     require.postgres.user(app.name, app.name)
     require.postgres.database(app.name, app.name)
     require.files.directory(str(app.venv), use_sudo=True)
@@ -550,17 +520,14 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             sudo('sudo -u {0} git clone https://github.com/clld/{0}-pages.git'.format(app.name))
 
     with virtualenv(str(app.venv)):
-        #sudo('pip install -U setuptools')
-        if lsb_release == 'precise':
-            sudo('pip install pip==1.4.1')
-        #else:
-        #    sudo('pip install pip')
-        sudo('pip install webhelpers2==2.0rc1')
-        sudo('pip install newrelic')
-        require.python.package('gunicorn', use_sudo=True)
-        require.python.package('psycopg2', use_sudo=True)
-        for repos in ['clld', 'clldmpg'] + getattr(app, 'dependencies', []) + [app.name]:
-            install_repos(repos)
+        require.python.pip('6.0.6')
+        sp = env['sudo_prefix']
+        env['sudo_prefix'] += ' -H'  # set HOME for pip log/cache
+        require.python.packages(app.require_pip, use_sudo=True)
+        for name in [app.name] + getattr(app, 'dependencies', []):
+            pkg = '-e git+git://github.com/clld/%s.git#egg=%s' % (name, name)
+            require.python.package(pkg, use_sudo=True)
+        env['sudo_prefix'] = sp
         sudo('webassets -m %s.assets build' % app.name)
 
     require_bibutils(app)
