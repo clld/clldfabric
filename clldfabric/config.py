@@ -132,7 +132,7 @@ class Config(dict):
 
         parser = SafeConfigParser()
         parser.getlist = lambda s, o: parser.get(s, o).split()
-        parser.getlines = lambda s, o: [l for l in parser.get(s, o).splitlines() if l]
+        parser.getlines = lambda s, o: [l.strip() for l in parser.get(s, o).splitlines() if l.strip()]
         found = parser.read(self.filename)
         if not found:
             raise RuntimeError('failed to read app config %r' % self.filename)
