@@ -4,6 +4,7 @@ requires = [
     'clld',
     'fabric',
     'fabtools==0.19',
+    'Jinja2',
     'path.py',
     'pathlib',
     'pytz',

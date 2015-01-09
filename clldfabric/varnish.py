@@ -17,7 +17,7 @@ from fabtools import require
 from fabtools import service
 
 from clldfabric.util import (
-    create_file_as_root, SITE_TEMPLATE, get_template_variables, http_auth,
+    create_file_as_root, upload_template_as_root, get_template_variables, http_auth,
 )
 from clldfabric.config import App
 
@@ -83,9 +83,9 @@ def cache(app):  # pragma: no cover
     create_file_as_root(site_config, SITE_VCL_TEMPLATE.format(app=app))
     service.restart('varnish')
 
-    create_file_as_root(
-        app.nginx_site,
-        SITE_TEMPLATE.format(**get_template_variables(App(app.name, 6081, domain=app.domain))))
+    template_vars = get_template_variables(App(app.name, 6081, domain=app.domain))
+    template_vars['SITE'] = True
+    upload_template_as_root(app.nginx_site, 'nginx-app.conf', template_vars)
     service.reload('nginx')
 
 

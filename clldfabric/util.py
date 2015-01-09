@@ -14,6 +14,7 @@ from fabric.api import sudo, run, local, put, env, cd, task, execute, settings
 from fabric.contrib.console import confirm
 from fabric.contrib.files import exists
 from fabtools import require
+from fabtools.files import upload_template
 from fabtools.python import virtualenv
 from fabtools import service
 from fabtools import postgres
@@ -23,6 +24,8 @@ from clld.scripts.util import data_file
 # we prevent the tasks defined here from showing up in fab --list, because we only
 # want the wrapped version imported from clldfabric.tasks to be listed.
 __all__ = []
+
+TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
 
 env.use_ssh_config = True
 
@@ -40,288 +43,12 @@ def working_directory(path):
         os.chdir(prev_cwd)
 
 
-DEFAULT_SITE = """\
-server {
-        listen 80 default_server;
-        root /usr/share/nginx/www;
-        index index.html index.htm;
-        server_name localhost;
-
-        location / {
-                try_files $uri $uri/ /index.html;
-        }
-
-        include /etc/nginx/locations.d/*.conf;
-}
-"""
-
-DEFAULT_SITE_SSL = """\
-server {
-        listen 443 default_server;
-        root /usr/share/nginx/www;
-        index index.html index.htm;
-        server_name localhost;
-
-        ssl on;
-        ssl_certificate /etc/nginx/ssl/server.crt;
-        ssl_certificate_key /etc/nginx/ssl/server.key;
-        include /etc/nginx/locations.ssl.d/*.conf;
-}
-"""
-
-
-LOCATION_TEMPLATE = """\
-location /{app.name} {{
-{auth}
-        proxy_pass_header Server;
-        proxy_set_header Host $http_host;
-        proxy_redirect off;
-        proxy_set_header X-Forwarded-For  $remote_addr;
-        proxy_set_header X-Scheme $scheme;
-        proxy_connect_timeout 20;
-        proxy_read_timeout 20;
-        proxy_pass http://127.0.0.1:{app.port}/;
-}}
-
-location /{app.name}/admin {{
-{admin_auth}
-        proxy_pass_header Server;
-        proxy_set_header Host $http_host;
-        proxy_redirect off;
-        proxy_set_header X-Forwarded-For  $remote_addr;
-        proxy_set_header X-Scheme $scheme;
-        proxy_connect_timeout 20;
-        proxy_read_timeout 20;
-        proxy_pass http://127.0.0.1:{app.port}/admin;
-}}
-
-location /{app.name}/clld-static/ {{
-        alias {app.venv}/src/clld/clld/web/static/;
-}}
-
-location /{app.name}/static/ {{
-        alias {app.venv}/src/{app.name}/{app.name}/static/;
-}}
-"""
-
-SITE_TEMPLATE = """\
-server {{
-    server_name  *.{app.domain};
-    return       301 http://{app.domain}$request_uri;
-}}
-
-server {{
-    server_name {app.domain};
-    access_log /var/log/{app.name}/access.log;
-
-    root {app.www};
-
-    location / {{
-{auth}
-            proxy_pass_header Server;
-            proxy_set_header Host $http_host;
-            proxy_redirect off;
-            proxy_set_header X-Forwarded-For  $remote_addr;
-            proxy_set_header X-Scheme $scheme;
-            proxy_connect_timeout 20;
-            proxy_read_timeout 20;
-            proxy_pass http://127.0.0.1:{app.port}/;
-    }}
-
-    location /admin {{
-{admin_auth}
-            proxy_pass_header Server;
-            proxy_set_header Host $http_host;
-            proxy_redirect off;
-            proxy_set_header X-Forwarded-For  $remote_addr;
-            proxy_set_header X-Scheme $scheme;
-            proxy_connect_timeout 20;
-            proxy_read_timeout 20;
-            proxy_pass http://127.0.0.1:{app.port}/admin;
-    }}
-
-    location /clld-static/ {{
-            alias {app.venv}/src/clld/clld/web/static/;
-    }}
-
-    location /static/ {{
-            alias {app.venv}/src/{app.name}/{app.name}/static/;
-    }}
-
-    location /files/ {{
-            alias {app.www}/files/;
-    }}
-
-    error_page 502 503 =502 /503.html;
-    location = /503.html {{
-        root {app.www};
-    }}
-}}
-"""
-
-LOGROTATE_TEMPLATE = """\
-/var/log/{app.name}/access.log {{
-        daily
-        missingok
-        rotate 52
-        compress
-        delaycompress
-        notifempty
-        create 0640 www-data adm
-        sharedscripts
-        prerotate
-                if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
-                        run-parts /etc/logrotate.d/httpd-prerotate; \
-                fi; \
-        endscript
-        postrotate
-                [ ! -f /var/run/nginx.pid ] || kill -USR1 `cat /var/run/nginx.pid`
-        endscript
-}}
-"""
-
-HTTP_503_TEMPLATE = """\
-<html>
-    <head>
-        <title>Service Unavailable</title>
-    </head>
-<body>
-<h1>{app.name} is currently down for maintenance</h1>
-<p>We expect to be back around {timestamp}. Thanks for your patience.</p>
-</body>
-</html>
-"""
-
-_SUPERVISOR_TEMPLATE = """\
-[program:{app.name}]
-command={newrelic} run-program {gunicorn} -u {app.name} -g {app.name} --max-requests 1000 --limit-request-line 8000 --error-logfile {app.error_log} {app.config}
-environment=NEW_RELIC_CONFIG_FILE="{app.newrelic_config}"
-autostart=%s
-autorestart=%s
-redirect_stderr=True
-"""
-SUPERVISOR_TEMPLATE = {
-    'pause': _SUPERVISOR_TEMPLATE % ('false', 'false'),
-    'run': _SUPERVISOR_TEMPLATE % ('true', 'true'),
-}
-
-NEWRELIC_TEMPLATE = """\
-[newrelic]
-license_key = {newrelic_api_key}
-app_name = {app.name}
-monitor_mode = {monitor_mode}
-log_file = {app.newrelic_log}
-log_level = warning
-ssl = false
-capture_params = true
-transaction_tracer.enabled = true
-transaction_tracer.transaction_threshold = apdex_f
-transaction_tracer.record_sql = raw
-transaction_tracer.stack_trace_threshold = 0.5
-transaction_tracer.explain_enabled = true
-transaction_tracer.explain_threshold = 0.5
-transaction_tracer.function_trace =
-error_collector.enabled = true
-error_collector.ignore_errors =
-browser_monitoring.auto_instrument = false
-thread_profiler.enabled = false
-"""
-
-_CONFIG_TEMPLATE = """\
-[app:{app.name}]
-use = egg:{app.name}
-pyramid.reload_templates = false
-pyramid.debug_authorization = false
-pyramid.debug_notfound = false
-pyramid.debug_routematch = false
-pyramid.default_locale_name = en
-pyramid.includes =
-    pyramid_tm
-    pyramid_exclog
-
-sqlalchemy.url = {app.sqlalchemy_url}
-exclog.extra_info = true
-clld.environment = production
-clld.files = {app.www}/files
-clld.home = {app.home}
-clld.pages = {app.pages}
-blog.host = {bloghost}
-blog.user = {bloguser}
-blog.password = {blogpassword}
-
-%s
-
-[server:main]
-use = egg:waitress#main
-host = 0.0.0.0
-port = {app.port}
-workers = {app.workers}
-proc_name = {app.name}
-
-[loggers]
-keys = root, {app.name}, sqlalchemy, exc_logger
-
-[handlers]
-keys = console, exc_handler
-
-[formatters]
-keys = generic, exc_formatter
-
-[logger_root]
-level = WARN
-handlers = console
-
-[logger_{app.name}]
-level = WARN
-handlers =
-qualname = {app.name}
-
-[logger_sqlalchemy]
-level = WARN
-handlers =
-qualname = sqlalchemy.engine
-
-[logger_exc_logger]
-level = ERROR
-handlers = exc_handler
-qualname = exc_logger
-
-[handler_console]
-class = StreamHandler
-args = (sys.stderr,)
-level = NOTSET
-formatter = generic
-
-[handler_exc_handler]
-class = handlers.SMTPHandler
-args = (('localhost', 25), '{app.name}@{env.host}', ['{app.error_email}'], '{app.name} Exception')
-level = ERROR
-formatter = exc_formatter
-
-[formatter_generic]
-format = %%(asctime)s %%(levelname)-5.5s [%%(name)s][%%(threadName)s] %%(message)s
-
-[formatter_exc_formatter]
-format = %%(asctime)s %%(message)s
-"""
-
-CONFIG_TEMPLATES = {
-    'test': _CONFIG_TEMPLATE % """\
-[filter:paste_prefix]
-use = egg:PasteDeploy#prefix
-prefix = /{app.name}
-
-[pipeline:main]
-pipeline =
-    paste_prefix
-    {app.name}
-""",
-    'production': _CONFIG_TEMPLATE % """\
-[pipeline:main]
-pipeline =
-    {app.name}
-""",
-}
+def upload_template_as_root(dest, template, context=None, mode=None, owner='root'):
+    if mode is not None:
+        mode = int(mode, 8)
+    upload_template(template, str(dest), context, use_jinja=True,
+                    template_dir=TEMPLATE_DIR, use_sudo=True, backup=False,
+                    mode=mode, chown=True, user=owner)
 
 
 def create_file_as_root(path, content, **kw):
@@ -365,10 +92,9 @@ def supervisor(app, command, template_variables=None):
     .. seealso: http://serverfault.com/a/479754
     """
     template_variables = template_variables or get_template_variables(app)
-    assert command in SUPERVISOR_TEMPLATE
-    create_file_as_root(
-        app.supervisor,
-        SUPERVISOR_TEMPLATE[command].format(**template_variables), mode='644')
+    template_variables['PAUSE'] = {'pause': True, 'run': False}[command]
+    upload_template_as_root(
+        app.supervisor, 'supervisor.conf', template_variables, mode='644')
     if command == 'run':
         sudo('supervisorctl reread')
         sudo('supervisorctl update %s' % app.name)
@@ -414,10 +140,10 @@ def maintenance(app, hours=2, template_variables=None):
     template_variables = template_variables or get_template_variables(app)
     ts = utc.localize(datetime.utcnow() + timedelta(hours=hours))
     ts = ts.astimezone(timezone('Europe/Berlin')).strftime('%Y-%m-%d %H:%M %Z%z')
+    template_variables['timestamp'] = ts
     require.files.directory(str(app.www), use_sudo=True)
-    create_file_as_root(
-        app.www.joinpath('503.html'),
-        HTTP_503_TEMPLATE.format(timestamp=ts, **template_variables))
+    upload_template_as_root(
+        app.www.joinpath('503.html'), '503.html', template_variables)
 
 
 def http_auth(app):
@@ -545,14 +271,15 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     template_variables['admin_auth'] = auth
 
     if environment == 'test':
-        create_file_as_root('/etc/nginx/sites-available/default', DEFAULT_SITE)
-        create_file_as_root(
-            app.nginx_location, LOCATION_TEMPLATE.format(**template_variables))
+        upload_template_as_root('/etc/nginx/sites-available/default', 'nginx-default.conf')
+        template_variables['SITE'] = False
+        upload_template_as_root(
+            app.nginx_location, 'nginx-app.conf', template_variables)
     elif environment == 'production':
-        create_file_as_root(app.nginx_site, SITE_TEMPLATE.format(**template_variables))
-        create_file_as_root(
-            '/etc/logrotate.d/{0}'.format(app.name),
-            LOGROTATE_TEMPLATE.format(**template_variables))
+        template_variables['SITE'] = True
+        upload_template_as_root(app.nginx_site, 'nginx-app.conf', template_variables)
+        upload_template_as_root(
+            '/etc/logrotate.d/{0}'.format(app.name), 'logrotate.conf', template_variables)
 
     maintenance(app, hours=app.deploy_duration, template_variables=template_variables)
     service.reload('nginx')
@@ -594,10 +321,9 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                 if confirm('Vacuum database?', default=False):
                     sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
 
-    create_file_as_root(
-        app.config, CONFIG_TEMPLATES[environment].format(**template_variables))
-    create_file_as_root(
-        app.newrelic_config, NEWRELIC_TEMPLATE.format(**template_variables))
+    template_variables['TEST'] = {'test': True, 'production': False}[environment]
+    upload_template_as_root(app.config, 'config.ini', template_variables)
+    upload_template_as_root(app.newrelic_config, 'newrelic.ini', template_variables)
 
     supervisor(app, 'run', template_variables)
 
