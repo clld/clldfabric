@@ -230,6 +230,22 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     require.postgres.database(app.name, app.name)
     require.files.directory(str(app.venv), use_sudo=True)
 
+    with_pg_collkey = getattr(app, 'pg_collkey', False)
+    if with_pg_collkey:
+        pg_version = '9.1' if lsb_release == 'precise' else '9.3'
+        if not exists('/usr/lib/postgresql/%s/lib/collkey_icu.so' % pg_version):
+            require.deb.packages(['postgresql-server-dev-%s' % pg_version, 'libicu-dev'])
+            upload_template_as_root(
+                '/tmp/Makefile', 'pg_collkey_Makefile', dict(pg_version=pg_version))
+
+            require.files.file(
+                '/tmp/collkey_icu.c',
+                source=os.path.join(
+                    os.path.dirname(__file__), 'pg_collkey-v0.5', 'collkey_icu.c'))
+            with cd('/tmp'):
+                sudo('make')
+                sudo('make install')
+
     if lsb_release == 'precise':
         require.deb.package('python-dev')
         require.python.virtualenv(str(app.venv), use_sudo=True)
@@ -320,6 +336,13 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
 
                 if confirm('Vacuum database?', default=False):
                     sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
+
+    if with_pg_collkey:
+        require.files.file(
+            '/tmp/collkey_icu.sql',
+            source=os.path.join(
+                os.path.dirname(__file__), 'pg_collkey-v0.5', 'collkey_icu.sql'))
+        sudo('sudo -u postgres psql -f /tmp/collkey_icu.sql -d {0.name}'.format(app))
 
     template_variables['TEST'] = {'test': True, 'production': False}[environment]
     upload_template_as_root(app.config, 'config.ini', template_variables)

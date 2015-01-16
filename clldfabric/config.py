@@ -3,7 +3,7 @@ Configuration of CLLD apps.
 
 .. note::
 
-    Some fabirc tasks require additional information like
+    Some fabric tasks require additional information like
 
     - ssh config
     - environment variables
