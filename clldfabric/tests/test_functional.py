@@ -18,12 +18,13 @@ from path import path
                 require=Mock(),
                 postgres=Mock(),
                 import_module=Mock(return_value=None),
+                upload_template=Mock(),
                 data_file=Mock(return_value=path('.')))
 def test_deploy():
     from clldfabric.util import deploy, copy_files
-    from clldfabric.config import App
+    from clldfabric.config import Config
 
-    app = App('test', 9999, domain='d')
+    app = Config()['testapp']
     assert app.src
     deploy(app, 'test', with_files=False)
     deploy(app, 'test', with_alembic=True, with_files=False)
