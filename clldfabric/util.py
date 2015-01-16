@@ -201,6 +201,14 @@ def copy_rdfdump(app):
     require.files.directory(dl_dir, use_sudo=True, mode="755")
 
 
+def init_pg_collkey(app):
+    require.files.file(
+        '/tmp/collkey_icu.sql',
+        source=os.path.join(
+            os.path.dirname(__file__), 'pg_collkey-v0.5', 'collkey_icu.sql'))
+    sudo('sudo -u postgres psql -f /tmp/collkey_icu.sql -d {0.name}'.format(app))
+
+
 @task
 def deploy(app, environment, with_alembic=False, with_blog=False, with_files=True):
     with settings(warn_only=True):
@@ -245,6 +253,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             with cd('/tmp'):
                 sudo('make')
                 sudo('make install')
+        init_pg_collkey(app)
 
     if lsb_release == 'precise':
         require.deb.package('python-dev')
@@ -321,6 +330,8 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                 sudo('sudo -u postgres dropdb %s' % app.name)
 
             require.postgres.database(app.name, app.name)
+            if with_pg_collkey:
+                init_pg_collkey(app)
 
         sudo('sudo -u {0.name} psql -f /tmp/{0.name}.sql -d {0.name}'.format(app))
     else:
@@ -336,13 +347,6 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
 
                 if confirm('Vacuum database?', default=False):
                     sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
-
-    if with_pg_collkey:
-        require.files.file(
-            '/tmp/collkey_icu.sql',
-            source=os.path.join(
-                os.path.dirname(__file__), 'pg_collkey-v0.5', 'collkey_icu.sql'))
-        sudo('sudo -u postgres psql -f /tmp/collkey_icu.sql -d {0.name}'.format(app))
 
     template_variables['TEST'] = {'test': True, 'production': False}[environment]
     upload_template_as_root(app.config, 'config.ini', template_variables)
