@@ -121,7 +121,7 @@ class Config(dict):
 
     _getters = {
         'getint': ['workers', 'deploy_duration', 'port'],
-        'getboolean': ['with_blog', '_pages'],
+        'getboolean': ['with_blog', '_pages', 'pg_collkey'],
         'getlist': ['dependencies'],  # whitespace separated list
         'getlines': ['require_deb', 'require_pip'],  # newline separated list
     }
