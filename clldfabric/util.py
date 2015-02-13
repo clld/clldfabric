@@ -75,12 +75,14 @@ def get_template_variables(app, monitor_mode=False, with_blog=False):
 
     if with_blog:  # pragma: no cover
         for key, default in [
-            ('bloghost', 'blog.%s' % app.domain), ('bloguser', app.name)
+            ('bloghost', 'blog.%s' % app.domain),
+            ('bloguser', app.name),
+            ('blogpassword', ''),
         ]:
-            custom = raw_input('Blog %s [%s]: ' % (key[4:], default))
-            res[key] = custom if custom else default
-
-        res['blogpassword'] = getpass(prompt='Blog password: ')
+            res[key] = os.environ.get(('%s_%s' % (app.name, key)).upper(), '')
+            if not res[key]:
+                custom = raw_input('Blog %s [%s]: ' % (key[4:], default))
+                res[key] = custom if custom else default
         assert res['blogpassword']
 
     return res
@@ -191,10 +193,15 @@ def copy_files(app):
 
 @task
 def copy_rdfdump(app):
+    execute(copy_downloads(app, pattern='*.n3.gz'))
+
+
+@task
+def copy_downloads(app, pattern='*'):
     dl_dir = app.src.joinpath(app.name, 'static', 'download')
     require.files.directory(dl_dir, use_sudo=True, mode="777")
     local_dl_dir = data_file(import_module(app.name), '..', app.name, 'static', 'download')
-    for f in local_dl_dir.files('*.n3.gz'):
+    for f in local_dl_dir.files(pattern):
         target = dl_dir.joinpath(f.basename())
         create_file_as_root(target, open(f).read())
         sudo('chown %s:%s %s' % (app.name, app.name, target))
