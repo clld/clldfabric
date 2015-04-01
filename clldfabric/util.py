@@ -353,7 +353,10 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                             app, app.bin('alembic')))
 
                 if confirm('Vacuum database?', default=False):
-                    sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
+                    if confirm('VACUUM FULL?', default=False):
+                        sudo('sudo -u postgres vacuumdb -f -z -d %s' % app.name)
+                    else:
+                        sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
 
     template_variables['TEST'] = {'test': True, 'production': False}[environment]
     upload_template_as_root(app.config, 'config.ini', template_variables)
