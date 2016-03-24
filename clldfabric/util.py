@@ -324,7 +324,8 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             execute(copy_files, app)
 
     if not with_alembic and confirm('Recreate database?', default=False):
-        local('pg_dump -x -O -f /tmp/{0.name}.sql {0.name}'.format(app))
+        db_name = raw_input('from db [{0.name}]: '.format(app))
+        local('pg_dump -x -O -f /tmp/{0.name}.sql {1}'.format(app, db_name or app.name))
         local('gzip -f /tmp/{0.name}.sql'.format(app))
         require.files.file(
             '/tmp/{0.name}.sql.gz'.format(app),
