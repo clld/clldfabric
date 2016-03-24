@@ -360,6 +360,11 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
                         sudo('sudo -u postgres vacuumdb -z -d %s' % app.name)
 
     template_variables['TEST'] = {'test': True, 'production': False}[environment]
+    # We only set add a setting clld.files, if the corresponding directory exists;
+    # otherwise the app would throw an error on startup.
+    template_variables['files'] = False
+    if exists(app.www.joinpath('files')):
+        template_variables['files'] = app.www.joinpath('files')
     upload_template_as_root(app.config, 'config.ini', template_variables)
     upload_template_as_root(app.newrelic_config, 'newrelic.ini', template_variables)
 
