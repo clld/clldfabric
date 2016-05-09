@@ -287,6 +287,9 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             require.python.package(pkg, use_sudo=True)
         env['sudo_prefix'] = sp
         sudo('webassets -m %s.assets build' % app.name)
+        res = sudo('python -c "import clld; print(clld.__file__)"')
+        assert res.startswith('/usr/venvs') and res.endswith('__init__.py')
+        template_variables['clld_dir'] = '/'.join(res.split('/')[:-1])
 
     require_bibutils(app)
 
