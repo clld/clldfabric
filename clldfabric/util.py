@@ -201,9 +201,9 @@ def copy_downloads(app, pattern='*'):
     dl_dir = app.src.joinpath(app.name, 'static', 'download')
     require.files.directory(dl_dir, use_sudo=True, mode="777")
     local_dl_dir = data_file(import_module(app.name), '..', app.name, 'static', 'download')
-    for f in local_dl_dir.files(pattern):
-        target = dl_dir.joinpath(f.basename())
-        create_file_as_root(target, open(f).read())
+    for f in local_dl_dir.glob(pattern):
+        target = dl_dir.joinpath(f.name)
+        create_file_as_root(target, open(f.as_posix()).read())
         sudo('chown %s:%s %s' % (app.name, app.name, target))
     require.files.directory(dl_dir, use_sudo=True, mode="755")
 
