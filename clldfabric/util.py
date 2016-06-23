@@ -18,6 +18,7 @@ from fabtools.files import upload_template
 from fabtools.python import virtualenv
 from fabtools import service
 from fabtools import postgres
+from clldutils.path import Path
 
 from clld.scripts.util import data_file
 
@@ -200,7 +201,7 @@ def copy_rdfdump(app):
 def copy_downloads(app, pattern='*'):
     dl_dir = app.src.joinpath(app.name, 'static', 'download')
     require.files.directory(dl_dir, use_sudo=True, mode="777")
-    local_dl_dir = data_file(import_module(app.name), '..', app.name, 'static', 'download')
+    local_dl_dir = Path(import_module(app.name).__file__).parent.joinpath('static', 'download')
     for f in local_dl_dir.glob(pattern):
         target = dl_dir.joinpath(f.name)
         create_file_as_root(target, open(f.as_posix()).read())
