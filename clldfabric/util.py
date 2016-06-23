@@ -31,6 +31,10 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), 'templates')
 env.use_ssh_config = True
 
 
+def get_input(prompt):
+    return raw_input(prompt)
+
+
 @contextlib.contextmanager
 def working_directory(path):
     """A context manager which changes the working directory to the given
@@ -82,7 +86,7 @@ def get_template_variables(app, monitor_mode=False, with_blog=False):
         ]:
             res[key] = os.environ.get(('%s_%s' % (app.name, key)).upper(), '')
             if not res[key]:
-                custom = raw_input('Blog %s [%s]: ' % (key[4:], default))
+                custom = get_input('Blog %s [%s]: ' % (key[4:], default))
                 res[key] = custom if custom else default
         assert res['blogpassword']
 
@@ -328,7 +332,7 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
             execute(copy_files, app)
 
     if not with_alembic and confirm('Recreate database?', default=False):
-        db_name = raw_input('from db [{0.name}]: '.format(app))
+        db_name = get_input('from db [{0.name}]: '.format(app))
         local('pg_dump -x -O -f /tmp/{0.name}.sql {1}'.format(app, db_name or app.name))
         local('gzip -f /tmp/{0.name}.sql'.format(app))
         require.files.file(

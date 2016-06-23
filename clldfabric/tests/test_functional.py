@@ -8,7 +8,7 @@ from path import path
                 confirm=Mock(return_value=True),
                 exists=Mock(return_value=True),
                 virtualenv=MagicMock(),
-                sudo=Mock(),
+                sudo=Mock(return_value='/usr/venvs/__init__.py'),
                 run=Mock(return_value='{"status": "ok"}'),
                 local=Mock(),
                 put=Mock(),
@@ -17,6 +17,7 @@ from path import path
                 cd=MagicMock(),
                 require=Mock(),
                 postgres=Mock(),
+                get_input=Mock(return_value='app'),
                 import_module=Mock(return_value=None),
                 upload_template=Mock(),
                 data_file=Mock(return_value=path('.')))
