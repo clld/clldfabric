@@ -1,5 +1,5 @@
 from mock import Mock, MagicMock, patch
-from path import path
+from clldutils.path import Path
 
 
 @patch.multiple('clldfabric.util',
@@ -20,7 +20,7 @@ from path import path
                 get_input=Mock(return_value='app'),
                 import_module=Mock(return_value=None),
                 upload_template=Mock(),
-                data_file=Mock(return_value=path('.')))
+                data_file=Mock(return_value=Path('.')))
 def test_deploy():
     from clldfabric.util import deploy, copy_files
     from clldfabric.config import Config
