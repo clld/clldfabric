@@ -250,6 +250,12 @@ def deploy(app, environment, with_alembic=False, with_blog=False, with_files=Tru
     require.postgres.database(app.name, app.name)
     require.files.directory(str(app.venv), use_sudo=True)
 
+    if getattr(app, 'pg_unaccent', False):
+        require.deb.packages(['postgresql-contrib'])
+        sudo('sudo -u postgres psql -c "{0}" -d {1.name}'.format(
+            'CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public;',
+            app))    
+
     with_pg_collkey = getattr(app, 'pg_collkey', False)
     if with_pg_collkey:
         pg_version = '9.1' if lsb_release == 'precise' else '9.3'
